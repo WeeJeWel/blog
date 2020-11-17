@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>
+    
+    Using AWS Lambda to sync an Elastic Load Balancer&#39;s Target Groups —
+    
+    Emile Nijssen's Blog
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/png" href="/img/me.jpg">
+</head>
+
+<body>
+
+  <a href="/"><img class="me" src="/img/me.jpg" alt="My head" /></a>
+  <div class="sitetitle">Emile Nijssen's Blog</div>
+
+  
+  <h1 id="using-aws-lambda-to-sync-an-elastic-load-balancers-target-groups">Using AWS Lambda to sync an Elastic Load Balancer's Target Groups</h1>
+<p>Some of our services at <a href="https://homey.app">Homey</a> use a public Application Load Balancer to balance load between targets (servers). These are managed by Elastic Beanstalk, which also handles the registering en de-registering of these targets.</p>
+<p>Many microservices talk to this load balancer. To optimize latency and save on data-transfer costs, requests between microservices should be routed without leaving the VPC. So adding an internal load balancer is the natural solution, however, AWS does not allow you to have two load balancers use the same target group (a list of registered servers).</p>
+<p>I made a Lambda function that runs every 5 minutes to synchronize targets from the external load balancer to the internal load balancer. I'm sharing it because at the time I didn't find anything like it.</p>
+<pre><code class="hljs javascript language-javascript"><span class="hljs-meta">'use strict'</span>;
+
+<span class="hljs-comment">/*
+ * This script does a one-way synchronization between two Target Groups of a Elastic Load Balancer (v2).
+ * 
+ * We use this to have an internal and external load balancer, where the external load balancer's target
+ * groups are managed by Elastic Beanstalk.
+ */</span>
+
+<span class="hljs-keyword">const</span> AWS = <span class="hljs-built_in">require</span>(<span class="hljs-string">'aws-sdk'</span>);
+<span class="hljs-keyword">const</span> elb = <span class="hljs-keyword">new</span> AWS.ELBv2();
+
+<span class="hljs-keyword">const</span> TARGET_GROUP_INTERNAL = <span class="hljs-string">'arn:aws:elasticloadbalancing:eu-west-1:12345:targetgroup/my-elb-internal/abc123'</span>;
+<span class="hljs-keyword">const</span> TARGET_GROUP_EXTERNAL = <span class="hljs-string">'arn:aws:elasticloadbalancing:eu-west-1:12345:targetgroup/awseb-AWSEB-AABBCC/def456'</span>;
+
+exports.handler = <span class="hljs-keyword">async</span> () =&gt; {
+
+    <span class="hljs-comment">// Get internal target groups</span>
+    <span class="hljs-keyword">const</span> {
+        <span class="hljs-attr">TargetHealthDescriptions</span>: internalTargets,
+    } = <span class="hljs-keyword">await</span> elb.describeTargetHealth({
+        <span class="hljs-attr">TargetGroupArn</span>: TARGET_GROUP_INTERNAL,
+    }).promise();
+
+    <span class="hljs-comment">// Get External Target Groups</span>
+    <span class="hljs-keyword">const</span> {
+        <span class="hljs-attr">TargetHealthDescriptions</span>: externalTargets,
+    } = <span class="hljs-keyword">await</span> elb.describeTargetHealth({
+        <span class="hljs-attr">TargetGroupArn</span>: TARGET_GROUP_EXTERNAL,
+    }).promise();
+
+    <span class="hljs-comment">// Remove targets from Internal Target Group if they're not in the external group</span>
+    <span class="hljs-keyword">const</span> internalTargetsToRemove = internalTargets.filter(<span class="hljs-function"><span class="hljs-params">internalTarget</span> =&gt;</span> {
+        <span class="hljs-keyword">const</span> targetIsFoundInExternal = !!externalTargets.find(<span class="hljs-function"><span class="hljs-params">externalTarget</span> =&gt;</span> {
+            <span class="hljs-keyword">return</span> externalTarget.Target.Id === internalTarget.Target.Id;
+        });
+        <span class="hljs-keyword">return</span> targetIsFoundInExternal === <span class="hljs-literal">false</span>;
+    });
+
+    <span class="hljs-keyword">if</span>( internalTargetsToRemove.length ) {
+        <span class="hljs-keyword">await</span> elb.deregisterTargets({
+            <span class="hljs-attr">TargetGroupArn</span>: TARGET_GROUP_INTERNAL,
+            <span class="hljs-attr">Targets</span>: internalTargetsToRemove.map(<span class="hljs-function"><span class="hljs-params">internalTarget</span> =&gt;</span> ({
+                <span class="hljs-attr">Id</span>: internalTarget.Target.Id,
+            })),
+        }).promise();
+    }
+
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">`Removed <span class="hljs-subst">${internalTargetsToRemove.length}</span> targets.`</span>);
+
+    <span class="hljs-comment">// Add targets to Internal Target Group</span>
+    <span class="hljs-keyword">const</span> externalTargetsToAdd = externalTargets.filter(<span class="hljs-function"><span class="hljs-params">externalTarget</span> =&gt;</span> {
+        <span class="hljs-keyword">const</span> targetIsFoundInInternal = !!internalTargets.find(<span class="hljs-function"><span class="hljs-params">internalTarget</span> =&gt;</span> {
+            <span class="hljs-keyword">return</span> internalTarget.Target.Id === externalTarget.Target.Id;
+        });
+        <span class="hljs-keyword">return</span> targetIsFoundInInternal === <span class="hljs-literal">false</span>;
+    });
+
+    <span class="hljs-keyword">if</span>( externalTargetsToAdd.length ) {
+        <span class="hljs-keyword">await</span> elb.registerTargets({
+            <span class="hljs-attr">TargetGroupArn</span>: TARGET_GROUP_INTERNAL,
+            <span class="hljs-attr">Targets</span>: externalTargetsToAdd.map(<span class="hljs-function"><span class="hljs-params">externalTarget</span> =&gt;</span> ({
+                <span class="hljs-attr">Id</span>: externalTarget.Target.Id,
+            })),
+        }).promise();
+    }
+
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">`Added <span class="hljs-subst">${externalTargetsToAdd.length}</span> targets.`</span>);
+
+    <span class="hljs-keyword">return</span> {
+        <span class="hljs-attr">statusCode</span>: <span class="hljs-number">200</span>,
+    };
+};</code></pre>
+<p>This function is called every 5 minutes using an CloudWatch rule. Make sure the Lambda function has an IAM role that has access to modify ElasticLoadBalancing properties.</p>
+
+  <a class="back" href="/">← All Posts</a>
+
+  
+</body>
+
+</html>
