@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>
+    
+    Copy &amp; Paste Elastic Beanstalk Environment Variables —
+    
+    Emile Nijssen's Blog
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/png" href="/img/me.jpg">
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-3P1HN9EXFE"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-3P1HN9EXFE');
+  </script>
+</head>
+
+<body>
+
+  <a href="/"><img class="me" src="/img/me.jpg" alt="My head" /></a>
+  <div class="sitetitle">Emile Nijssen's Blog</div>
+
+  
+  <h1 id="copy--paste-elastic-beanstalk-environment-variables">Copy &amp; Paste Elastic Beanstalk Environment Variables</h1>
+<p>AWS Elastic Beanstalk has a list of environment variables, which cannot be copied easily when creating a new environment.</p>
+<p>These two JavaScript-bookmark snippets help you to easily copy/paste them when looking at the 'Configuration &gt; Software' page.</p>
+<p>Copy:</p>
+<pre><code class="hljs javascript language-javascript">javascript:navigator.clipboard.writeText(<span class="hljs-built_in">encodeURIComponent</span>(<span class="hljs-built_in">JSON</span>.stringify(angular.element(<span class="hljs-built_in">document</span>.querySelector(<span class="hljs-string">'.properties-table'</span>)).scope().environmentVariables.collection.reduce(<span class="hljs-function">(<span class="hljs-params">obj, item</span>) =&gt;</span> ({ ...obj, [item.optionName]: item.value, }), {}))))</code></pre>
+<p>Paste:</p>
+<pre><code class="hljs javascript language-javascript">javascript:navigator.clipboard.readText().then(<span class="hljs-function"><span class="hljs-params">vars</span> =&gt;</span> {$env = angular.element(<span class="hljs-built_in">document</span>.querySelector(<span class="hljs-string">'.properties-table'</span>)).scope(); $env.environmentVariables.getKeys().forEach(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> $env.environmentVariables.removeByIndex(<span class="hljs-number">0</span>)); $env.$apply(); <span class="hljs-built_in">Object</span>.entries(<span class="hljs-built_in">JSON</span>.parse(<span class="hljs-built_in">decodeURIComponent</span>(vars))).map(<span class="hljs-function">(<span class="hljs-params">[ key, value ]</span>) =&gt;</span> $env.environmentVariables.add(key, value)); $env.$apply()});</code></pre>
+
+  <a class="back" href="/">← All Posts</a>
+
+  
+</body>
+
+</html>
