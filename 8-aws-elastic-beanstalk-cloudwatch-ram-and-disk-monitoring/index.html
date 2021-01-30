@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>
+    
+    Monitoring AWS Elastic Beanstalk Memory and Disk Usage in Grafana —
+    
+    Emile Nijssen's Blog
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="icon" type="image/png" href="/img/me.jpg">
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-3P1HN9EXFE"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-3P1HN9EXFE');
+  </script>
+</head>
+
+<body>
+
+  <a href="/"><img class="me" src="/img/me.jpg" alt="My head" /></a>
+  <div class="sitetitle">Emile Nijssen's Blog</div>
+
+  
+  <h1 id="monitoring-aws-elastic-beanstalk-memory-and-disk-usage-in-grafana">Monitoring AWS Elastic Beanstalk Memory and Disk Usage in Grafana</h1>
+<p>By default AWS Elastic Beanstalk only monitors CPU, Network, etc. but no in-machine statistics such as the amounf of free memory and disk space usage.</p>
+<p>Their <a href="https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/customize-containers-cw.html">tutorial</a> uses a CloudWatch Agent, but this only tags the instance ID (e.g. <code>i-12345</code>), which is very useless if you want to monitor in Grafana. What I want to see is the environment name (e.g. <code>myapp-prod</code>).</p>
+<p>This solution uses a CloudWatch Agent to save metrics to CloudWatch as well, but tags all metrics with the environment name.</p>
+<h2 id="1-setup-aws-elastic-beanstalk">1. Setup AWS Elastic Beanstalk</h2>
+<p>Save this file as <code>/.ebextensions/cloudwatch.config</code> to automatically monitor and tag these into CloudWatch. You can then easily import those into Grafana (or the tool of your liking).</p>
+<pre><code class="hljs yaml language-yaml"><span class="hljs-attr">packages:</span>
+  <span class="hljs-attr">rpm:</span>
+    <span class="hljs-attr">amazon-cloudwatch-agent:</span> <span class="hljs-string">https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm</span>
+<span class="hljs-attr">files:</span>
+  <span class="hljs-string">"/home/ec2-user/amazon-cloudwatch-agent.json"</span><span class="hljs-string">:</span>
+    <span class="hljs-attr">mode:</span> <span class="hljs-string">"000755"</span>
+    <span class="hljs-attr">owner:</span> <span class="hljs-string">root</span>
+    <span class="hljs-attr">group:</span> <span class="hljs-string">root</span>
+    <span class="hljs-attr">content:</span> <span class="hljs-string">|
+      {
+        "agent": {
+          "metrics_collection_interval": 60
+        },
+        "metrics": {
+          "append_dimensions": {
+            "InstanceId": "${aws:InstanceId}"
+          },
+          "metrics_collected": {
+            "mem": {
+              "measurement": [
+                "mem_total",
+                "mem_free",
+                "mem_used",
+                "mem_used_percent",
+                "mem_available",
+                "mem_available_percent"
+              ],
+              "append_dimensions": {
+                "AWSEBEnvironmentName": "__EB_ENV__"
+              }
+            },
+            "cpu": {
+              "measurement": [
+                "cpu_time_active",
+                "cpu_time_nice",
+                "cpu_time_steal",
+                "cpu_usage_active",
+                "cpu_usage_idle",
+                "cpu_usage_iowait"
+              ],
+              "append_dimensions": {
+                "AWSEBEnvironmentName": "__EB_ENV__"
+              }
+            },
+            "disk": {
+              "measurement": [
+                "disk_free",
+                "disk_total",
+                "disk_used",
+                "disk_used_percent"
+              ],
+              "append_dimensions": {
+                "AWSEBEnvironmentName": "__EB_ENV__"
+              }
+            }
+          }
+        }
+      }
+</span><span class="hljs-attr">container_commands:</span>
+  <span class="hljs-attr">01_prepare_cloudwatch_agent_config:</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">|
+      EB_ENV="$(/opt/elasticbeanstalk/bin/get-config container -k environment_name)"
+      sed -i "s/__EB_ENV__/$EB_ENV/g" /home/ec2-user/amazon-cloudwatch-agent.json
+</span>  <span class="hljs-attr">02_run_cloudwatch_agent:</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">|</span>
+      <span class="hljs-string">amazon-cloudwatch-agent-ctl</span> <span class="hljs-string">-a</span> <span class="hljs-string">fetch-config</span> <span class="hljs-string">-m</span> <span class="hljs-string">ec2</span> <span class="hljs-string">-c</span> <span class="hljs-string">file:/home/ec2-user/amazon-cloudwatch-agent.json</span> <span class="hljs-string">-s</span></code></pre>
+<h2 id="2-setup-grafana">2. Setup Grafana</h2>
+<p>In your Grafana dashboard, create two variables:<br />
+<img src="./img/variables.png" alt="" /></p>
+<pre><code class="hljs"><span class="hljs-string">Name:</span> Region
+<span class="hljs-string">Type:</span> Query
+Data <span class="hljs-string">Source:</span> CloudWatch
+<span class="hljs-string">Query:</span> regions()</code></pre>
+<pre><code class="hljs"><span class="hljs-string">Name:</span> Environment
+<span class="hljs-string">Type:</span> Query
+Data <span class="hljs-string">Source:</span> CloudWatch
+<span class="hljs-string">Query:</span> dimension_values($Region,CWAgent,mem_free,AWSEBEnvironmentName)</code></pre>
+<p>And then create a Chart as follows:<br />
+<img src="./img/chart.png" alt="" /></p>
+<p>You can make this a repeating row to monitor all your environments:<br />
+<img src="./img/stats.png" alt="" /></p>
+<p>Good luck!</p>
+
+  <a class="back" href="/">← All Posts</a>
+
+  
+</body>
+
+</html>
