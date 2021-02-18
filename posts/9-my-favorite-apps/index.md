@@ -48,4 +48,4 @@ I use Safari daily, to this is the best password manager for me. No need to buy 
 
 # ProxyMan
 
-If you ever need to do HTTP(S) sniffing from iOS or macOS, ProxyMan is a great MITM-proxy there is.
+If you ever need to do HTTP(S) sniffing from iOS or macOS, ProxyMan is a great MITM-proxy.
