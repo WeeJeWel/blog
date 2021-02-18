@@ -98,7 +98,7 @@
       sed -i "s/__EB_ENV__/$EB_ENV/g" /home/ec2-user/amazon-cloudwatch-agent.json
 </span>  <span class="hljs-attr">02_run_cloudwatch_agent:</span>
     <span class="hljs-attr">command:</span> <span class="hljs-string">|</span>
-      <span class="hljs-string">amazon-cloudwatch-agent-ctl</span> <span class="hljs-string">-a</span> <span class="hljs-string">fetch-config</span> <span class="hljs-string">-m</span> <span class="hljs-string">ec2</span> <span class="hljs-string">-c</span> <span class="hljs-string">file:/home/ec2-user/amazon-cloudwatch-agent.json</span> <span class="hljs-string">-s</span></code></pre>
+      <span class="hljs-string">amazon-cloudwatch-agent-ctl</span> <span class="hljs-string">-a</span> <span class="hljs-string">append-config</span> <span class="hljs-string">-m</span> <span class="hljs-string">ec2</span> <span class="hljs-string">-c</span> <span class="hljs-string">file:/home/ec2-user/amazon-cloudwatch-agent.json</span> <span class="hljs-string">-s</span></code></pre>
 <h2 id="2-setup-grafana">2. Setup Grafana</h2>
 <p>In your Grafana dashboard, create two variables:<br />
 <img src="./img/variables.png" alt="" /></p>
